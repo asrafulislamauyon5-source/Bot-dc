@@ -61,7 +61,7 @@ client.on('messageCreate', async (message) => {
     const helpText = "📜 **Bot Commands List:**\n\n" +
       "💳 `!pay` - বিকাশ, নগদ ও রকেট নম্বর দেখার জন্য।\n" +
       "🔍 `!verify <TrxID>` - পেমেন্ট ভেরিফাই করার জন্য (কাস্টমারদের জন্য)।\n" +
-      "📦 `!order <Amount> <Product_Name>` - নতুন অর্ডার তৈরি করার জন্য (শুধুমাত্র Owner/Admin)।\n" +
+      "📦 `!order <Amount> <Product_Name>` - নতুন অর্ডার তৈরি করার জন্য (Staff/Admin Only)।\n" +
       "ℹ️ `!help` - সকল কমান্ডের তালিকা দেখতে।";
 
     return message.reply(helpText);
@@ -78,13 +78,19 @@ client.on('messageCreate', async (message) => {
     return message.reply(payText);
   }
 
-  // ৩. অর্ডার তৈরি করার কমান্ড (Owner Access Only): !order <Amount> <Product_Name>
+  // ৩. অর্ডার তৈরি করার কমান্ড (Allowed Roles Only): !order <Amount> <Product_Name>
   if (message.content.startsWith('!order')) {
-    // Verified Owner রোল চেকিং
-    const hasOwnerRole = message.member && message.member.roles.cache.some(role => role.name.toLowerCase() === 'verified owner');
+    // অনুমোদিত রোলের নামের কি-ওয়ার্ড
+    const allowedKeywords = ['owner', 'management', 'team hypernest', 'official staff', 'admin'];
 
-    if (!hasOwnerRole) {
-      return message.reply('❌ **অ্যাক্সেস ডিনাইড!** এই কমান্ডটি শুধুমাত্র **verified owner** রোলের ইউজাররা ব্যবহার করতে পারবেন।');
+    // ইউজারের রোলের সাথে ম্যাচিং চেকিং
+    const hasPermission = message.member && message.member.roles.cache.some(role => {
+      const roleName = role.name.toLowerCase();
+      return allowedKeywords.some(keyword => roleName.includes(keyword));
+    });
+
+    if (!hasPermission) {
+      return message.reply('❌ **অ্যাক্সেস ডিনাইড!** এই কমান্ডটি দেওয়ার পারমিশন আপনার নেই।');
     }
 
     const args = message.content.split(' ');
