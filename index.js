@@ -56,7 +56,25 @@ app.post('/sms-webhook', (req, res) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // ১. অর্ডার তৈরি করার কমান্ড: !order <Amount> <Product_Name>
+  // ১. পেমেন্ট নম্বর দেখার নতুন কমান্ড: !pay
+  if (message.content.trim() === '!pay') {
+    return message.reply(
+`💳 **Our Payment Methods** (১-ক্লিকে কপি করুন):
+
+💖 **bKash (Personal):**
+\`01756625140\`
+
+🧡 **Nagad (Personal):**
+\`01604757018\`
+
+💜 **Rocket (Personal):**
+\`01756625140\`
+
+⚠️ *টাকা পাঠানোর পর ট্রানজ্যাকশন আইডি ভেরিফাই করতে `!verify <TrxID>` কমান্ডটি ব্যবহার করুন।*`
+    );
+  }
+
+  // ২. অর্ডার তৈরি করার কমান্ড: !order <Amount> <Product_Name>
   if (message.content.startsWith('!order')) {
     const args = message.content.split(' ');
     const amount = parseFloat(args[1]);
@@ -72,10 +90,21 @@ client.on('messageCreate', async (message) => {
       createdBy: message.author.tag
     };
 
-    return message.reply(`📦 **অর্ডার তৈরি করা হয়েছে!**\n🛍️ **Product:** ${productName}\n💰 **Payable Amount:** Tk ${amount}\n\n👉 টাকা পাঠানোর পর কাস্টমার এখানে লিখুন: \`!verify <TrxID>\``);
+    return message.reply(
+`📦 **অর্ডার তৈরি করা হয়েছে!**
+🛍️ **Product:** ${productName}
+💰 **Payable Amount:** Tk ${amount}
+
+💳 **Payment Numbers** (কপি করতে স্পর্শ করুন):
+💖 **bKash:** \`01756625140\`
+🧡 **Nagad:** \`01604757018\`
+💜 **Rocket:** \`01756625140\`
+
+👉 টাকা পাঠানোর পর কাস্টমার এখানে লিখুন: \`!verify <TrxID>\``
+    );
   }
 
-  // ২. পেমেন্ট ভেরিফাই করার কমান্ড: !verify <TrxID>
+  // ৩. পেমেন্ট ভেরিফাই করার কমান্ড: !verify <TrxID>
   if (message.content.startsWith('!verify')) {
     const args = message.content.split(' ');
     const trxId = args[1] ? args[1].trim().toUpperCase() : null;
@@ -119,4 +148,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-    
+  
