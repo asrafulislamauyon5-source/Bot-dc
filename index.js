@@ -23,21 +23,22 @@ app.post('/sms-webhook', (req, res) => {
   if (message) {
     // TrxID বের করার রেগুলার এক্সপ্রেশন
     const trxMatch = message.match(/TrxID\s+([A-Z0-9]+)/i);
-    // টাকার পরিমাণ বের করার রেগুলার এক্সপ্রেশন
-    const amountMatch = message.match(/(?:Tk|BDT)\s*([\d,]+\.?\d*)/i);
 
     if (trxMatch) {
       const trxId = trxMatch[1].toUpperCase();
-      const amount = amountMatch ? amountMatch[1] : 'Unknown';
+
+      // SMS থেকে Balance অংশের তথ্য হাইড / ডিলিট করা
+      const cleanedMessage = message
+        .replace(/Balance\s+(?:Tk|BDT)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***')
+        .replace(/Bal\s+(?:Tk|BDT)?\s*[\d,]+\.?\d*/gi, 'Bal Tk ***');
 
       transactions[trxId] = {
         sender: sender || 'Unknown',
-        amount: amount,
-        fullMessage: message,
+        message: cleanedMessage,
         time: new Date()
       };
 
-      console.log(`Saved TrxID: ${trxId} | Amount: ${amount}`);
+      console.log(`Saved TrxID: ${trxId}`);
     }
   }
 
@@ -58,8 +59,8 @@ client.on('messageCreate', async (message) => {
 
     if (transactions[trxId]) {
       const data = transactions[trxId];
-      // ব্যালেন্স বা গোপন তথ্য ছাড়া শুধু প্রয়োজনীয় অংশ দেখানো
-      message.reply(`✅ Transaction **${trxId}** সফলভাবে ভেরিফাই হয়েছে!\n💰 **টাকার পরিমাণ:** Tk ${data.amount}`);
+      
+      message.reply(`✅ Transaction **${trxId}** সফলভাবে ভেরিফাই হয়েছে!\n\n**SMS Details:** ${data.message}`);
     } else {
       message.reply(`❌ Transaction ID: **${trxId}** খুঁজে পাওয়া যায়নি। সঠিক ID দিন অথবা কিছু সময় পর চেষ্টা করুন।`);
     }
