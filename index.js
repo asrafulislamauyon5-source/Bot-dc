@@ -3,7 +3,8 @@ const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
 app.use(express.json());
-
+app.use(express.urlencoded({ extended: true }));
+app.use(express.text());
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
