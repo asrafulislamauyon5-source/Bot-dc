@@ -45,7 +45,7 @@ app.post('/sms-webhook', (req, res) => {
         time: new Date()
       };
 
-      console.log(`Saved TrxID: ${trxId} \vert{} Amount:${amount}`);
+      console.log(`Saved TrxID: ${trxId} | Amount: ${amount}`);
     }
   }
 
@@ -56,22 +56,15 @@ app.post('/sms-webhook', (req, res) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // ১. পেমেন্ট নম্বর দেখার নতুন কমান্ড: !pay
+  // ১. পেমেন্ট নম্বর দেখার কমান্ড: !pay
   if (message.content.trim() === '!pay') {
-    return message.reply(
-`💳 **Our Payment Methods** (১-ক্লিকে কপি করুন):
-
-💖 **bKash (Personal):**
-\`01756625140\`
-
-🧡 **Nagad (Personal):**
-\`01604757018\`
-
-💜 **Rocket (Personal):**
-\`01756625140\`
-
-⚠️ *টাকা পাঠানোর পর ট্রানজ্যাকশন আইডি ভেরিফাই করতে `!verify <TrxID>` কমান্ডটি ব্যবহার করুন।*`
-    );
+    const payText = "💳 **Our Payment Methods** (১-ক্লিকে কপি করুন):\n\n" +
+      "💖 **bKash (Personal):**\n`01756625140`\n\n" +
+      "🧡 **Nagad (Personal):**\n`01604757018`\n\n" +
+      "💜 **Rocket (Personal):**\n`01756625140`\n\n" +
+      "⚠️ *টাকা পাঠানোর পর ট্রানজ্যাকশন আইডি ভেরিফাই করতে `!verify <TrxID>` কমান্ডটি ব্যবহার করুন।*";
+    
+    return message.reply(payText);
   }
 
   // ২. অর্ডার তৈরি করার কমান্ড: !order <Amount> <Product_Name>
@@ -90,18 +83,16 @@ client.on('messageCreate', async (message) => {
       createdBy: message.author.tag
     };
 
-    return message.reply(
-`📦 **অর্ডার তৈরি করা হয়েছে!**
-🛍️ **Product:** ${productName}
-💰 **Payable Amount:** Tk ${amount}
+    const orderText = "📦 **অর্ডার তৈরি করা হয়েছে!**\n" +
+      "🛍️ **Product:** " + productName + "\n" +
+      "💰 **Payable Amount:** Tk " + amount + "\n\n" +
+      "💳 **Payment Numbers** (কপি করতে স্পার্স করুন):\n" +
+      "💖 **bKash:** `01756625140`\n" +
+      "🧡 **Nagad:** `01604757018`\n" +
+      "💜 **Rocket:** `01756625140`\n\n" +
+      "👉 টাকা পাঠানোর পর কাস্টমার এখানে লিখুন: `!verify <TrxID>`";
 
-💳 **Payment Numbers** (কপি করতে স্পর্শ করুন):
-💖 **bKash:** \`01756625140\`
-🧡 **Nagad:** \`01604757018\`
-💜 **Rocket:** \`01756625140\`
-
-👉 টাকা পাঠানোর পর কাস্টমার এখানে লিখুন: \`!verify <TrxID>\``
-    );
+    return message.reply(orderText);
   }
 
   // ৩. পেমেন্ট ভেরিফাই করার কমান্ড: !verify <TrxID>
@@ -122,7 +113,7 @@ client.on('messageCreate', async (message) => {
     const trxData = transactions[trxId];
 
     if (!trxData) {
-      return message.reply(`❌ Transaction ID: **${trxId}** খুঁজে পাওয়া যায়নি। টাকা পাঠিয়ে থাকলে ১-২ মিনিট অপেক্ষা করে আবার চেষ্টা করুন।`);
+      return message.reply('❌ Transaction ID: **' + trxId + '** খুঁজে পাওয়া যায়নি। টাকা পাঠিয়ে থাকলে ১-২ মিনিট অপেক্ষা করে আবার চেষ্টা করুন।');
     }
 
     if (trxData.isUsed) {
@@ -130,13 +121,13 @@ client.on('messageCreate', async (message) => {
     }
 
     if (trxData.amount < currentOrder.amount) {
-      return message.reply(`❌ **পেমেন্ট অসম্পূর্ণ!**\nপ্রয়োজনীয় টাকা: **Tk ${currentOrder.amount}**\nআপনি পাঠিয়েছেন: **Tk ${trxData.amount}**`);
+      return message.reply('❌ **পেমেন্ট অসম্পূর্ণ!**\nপ্রয়োজনীয় টাকা: **Tk ' + currentOrder.amount + '**\nআপনি পাঠিয়েছেন: **Tk ' + trxData.amount + '**');
     }
 
     trxData.isUsed = true;
     delete pendingOrders[message.channel.id];
 
-    return message.reply(`🎉 **পেমেন্ট ভেরিফাইড ও সফল হয়েছে!**\n\n🛍️ **Product:** ${currentOrder.product}\n💰 **Paid Amount:** Tk ${trxData.amount}\n🆔 **TrxID:** ${trxId}\n\nআপনার অর্ডার প্রক্রিয়াধীন রয়েছে!`);
+    return message.reply('🎉 **পেমেন্ট ভেরিফাইড ও সফল হয়েছে!**\n\n🛍️ **Product:** ' + currentOrder.product + '\n💰 **Paid Amount:** Tk ' + trxData.amount + '\n🆔 **TrxID:** ' + trxId + '\n\nআপনার অর্ডার প্রক্রিয়াধীন রয়েছে!');
   }
 });
 
@@ -148,4 +139,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-  
