@@ -4,7 +4,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.text());
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -13,99 +13,78 @@ const client = new Client({
   ]
 });
 
-// ডাটা স্টোরেজ অবজেক্ট
 const transactions = {};
 const pendingOrders = {};
 
-// SMS Forwarder থেকে Webhook ডেটা রিসিভ
 app.post('/sms-webhook', (req, res) => {
-  const { sender, message } = req.body;
-  console.log('Received SMS from:', sender, 'Message:', message);
+  // অ্যাপ থেকে যেভাবে ডেটাই আসুক না কেন তা রিসিভ করা
+  const body = req.body || {};
+  const sender = body.sender || body.from || body.phone || 'Unknown';
+  const message = body.message || body.text || body.sms || body.body || (typeof body === 'string' ? body : '');
+
+  console.log('Received Webhook Payload:', JSON.stringify(body));
 
   if (message) {
-    // বিকাশ (TrxID), নগদ (TxnID/TxID) ও রকেট (TxnID)-এর জন্য রেগুলার এক্সপ্রেশন
-    const trxMatch = message.match(/(?:TrxID|TxnID|TxID|TRXID|TXNID)[:\s]*([A-Z0-9]+)/i);
-    // বিভিন্ন ধরনের টাকার ফরম্যাট ক্যাপচার (Tk 500, Tk. 500, 500 Tk, BDT 500)
+    // bKash (TrxID), Nagad (TxnID/TxID), Rocket (TxnID/TrxID) সব মেলাবে
+    const trxMatch = message.match(/(?:TrxID|TxnID|TxID|TRXID|TXNID|Trx ID|Txn ID)[:\s]*([A-Z0-9]+)/i);
     const amountMatch = message.match(/(?:Tk|BDT|Tk\.)\s*([\d,]+\.?\d*)|([\d,]+\.?\d*)\s*(?:Tk|BDT|Tk\.)/i);
-    const numberMatch = message.match(/(?:from|to)\s+(01\d{9})/i);
 
     if (trxMatch) {
       const trxId = trxMatch[1].toUpperCase();
-      
-      // টাকার পরিমাণ নিখুঁতভাবে বের করা
       let rawAmount = 0;
       if (amountMatch) {
         rawAmount = amountMatch[1] || amountMatch[2];
       }
       const amount = rawAmount ? parseFloat(rawAmount.replace(',', '')) : 0;
-      const senderNum = numberMatch ? numberMatch[1] : '';
 
-      // সিকিউরিটির জন্য Balance অংশ হাইড করা (বিকাশ ও নগদ সবগুলোর জন্য)
+      // সিকিউরিটির জন্য Balance তথ্য মুছে দেওয়া
       const cleanedMessage = message.replace(/(?:Balance|Bal)\s*(?:Tk|BDT|Tk\.)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***');
 
       transactions[trxId] = {
-        sender: sender || 'Unknown',
+        sender: sender,
         amount: amount,
-        senderNumber: senderNum,
         message: cleanedMessage,
         isUsed: false,
         time: new Date()
       };
 
-      console.log(`Saved Successfully -> TrxID/TxnID: ${trxId} | Amount: ${amount}`);
+      console.log(`✅ Saved TrxID: ${trxId} | Amount: ${amount}`);
     } else {
-      console.log('Failed to match TrxID/TxnID from SMS:', message);
+      console.log('❌ Could not parse TrxID from message:', message);
     }
   }
 
   res.status(200).send({ status: 'success' });
 });
 
-// ডিসকর্ড বট কমান্ড হ্যান্ডলার
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // ১. হেল্প কমান্ড
   if (message.content.trim() === '!help') {
-    const helpText = "📜 **Bot Commands List:**\n\n" +
-      "💳 `!pay` - পেমেন্ট নম্বর দেখার জন্য।\n" +
-      "🔍 `!verify <TrxID>` - পেমেন্ট ভেরিফাই করার জন্য (কাস্টমারদের জন্য)।\n" +
-      "📦 `!order <Amount> <Product_Name>` - নতুন অর্ডার তৈরি করতে (Admin/Staff Only)।\n" +
-      "ℹ️ `!help` - সকল কমান্ডের তালিকা দেখতে।";
-
-    return message.reply(helpText);
+    return message.reply(
+      "📜 **Bot Commands List:**\n\n" +
+      "💳 `!pay` - পেমেন্ট নম্বর দেখতে।\n" +
+      "🔍 `!verify <TrxID>` - পেমেন্ট ভেরিফাই করতে।\n" +
+      "📦 `!order <Amount> <Product_Name>` - নতুন অর্ডার তৈরি করতে।"
+    );
   }
 
-  // ২. পেমেন্ট মেথড দেখার কমান্ড
   if (message.content.trim() === '!pay') {
-    const payText = "💳 **Our Payment Methods** (১-ক্লিকে কপি করুন):\n\n" +
-      "💖 **bKash (Personal):**\n`01756625140`\n\n" +
-      "🧡 **Nagad (Personal):**\n`01604757018`\n\n" +
-      "💜 **Rocket (Personal):**\n`01756625140`\n\n" +
-      "⚠️ *টাকা পাঠানোর পর ট্রানজ্যাকশন আইডি ভেরিফাই করতে `!verify <TrxID>` কমান্ডটি ব্যবহার করুন।*";
-    
-    return message.reply(payText);
+    return message.reply(
+      "💳 **Our Payment Methods:**\n\n" +
+      "💖 **bKash:** `01756625140`\n" +
+      "🧡 **Nagad:** `01604757018`\n" +
+      "💜 **Rocket:** `01756625140`"
+    );
   }
 
-  // ৩. অর্ডার তৈরি করার কমান্ড: !order <Amount> <Product_Name>
   if (message.content.startsWith('!order')) {
-    const allowedKeywords = ['owner', 'management', 'team hypernest', 'official staff', 'admin'];
-
-    const hasPermission = message.member && message.member.roles.cache.some(role => {
-      const roleName = role.name.toLowerCase();
-      return allowedKeywords.some(keyword => roleName.includes(keyword));
-    });
-
-    if (!hasPermission) {
-      return message.reply('❌ **অ্যাক্সেস ডিনাইড!** এই কমান্ডটি দেওয়ার পারমিশন আপনার নেই।');
-    }
-
     const args = message.content.split(' ');
     const amount = parseFloat(args[1]);
     const productName = args.slice(2).join(' ');
 
     if (!amount || !productName) {
-      return message.reply('❌ সঠিক ফরম্যাট লিখুন: `!order <Amount> <Product_Name>`\nউদাহরণ: `!order 500 Netflix Subscription`');
+      return message.reply('❌ সঠিক ফরম্যাট: `!order <Amount> <Product_Name>`');
     }
 
     pendingOrders[message.channel.id] = {
@@ -114,66 +93,48 @@ client.on('messageCreate', async (message) => {
       createdBy: message.author.tag
     };
 
-    const orderText = "📦 **অর্ডার তৈরি করা হয়েছে!**\n" +
-      "🛍️ **Product:** " + productName + "\n" +
-      "💰 **Payable Amount:** Tk " + amount + "\n\n" +
-      "💳 **Payment Numbers** (কপি করতে স্পর্শ করুন):\n" +
-      "💖 **bKash:** `01756625140`\n" +
-      "🧡 **Nagad:** `01604757018`\n" +
-      "💜 **Rocket:** `01756625140`\n\n" +
-      "👉 টাকা পাঠানোর পর কাস্টমার এখানে লিখুন: `!verify <TrxID>`";
-
-    return message.reply(orderText);
+    return message.reply(
+      `📦 **অর্ডার তৈরি হয়েছে!**\n🛍️ **Product:** ${productName}\n💰 **Amount:** Tk ${amount}\n\n👉 টাকা পাঠিয়ে ভেরিফাই করতে লিখুন: \`!verify <TrxID>\``
+    );
   }
 
-  // ৪. পেমেন্ট ভেরিফাই করার কমান্ড: !verify <TrxID>
   if (message.content.startsWith('!verify')) {
     const args = message.content.split(' ');
     const trxId = args[1] ? args[1].trim().toUpperCase() : null;
 
     if (!trxId) {
-      return message.reply('❌ অনুগ্রহ করে আপনার Transaction ID দিন।\nউদাহরণ: `!verify 75X1WDG0`');
+      return message.reply('❌ সঠিক ফরম্যাট: `!verify <TrxID>`');
     }
 
     const currentOrder = pendingOrders[message.channel.id];
-
     if (!currentOrder) {
-      return message.reply('❌ এই চ্যানেলে কোনো পেন্ডিং অর্ডার নেই! প্রথমে অ্যাডমিনকে অর্ডার তৈরি করতে বলুন।');
+      return message.reply('❌ এই চ্যানেলে কোনো পেন্ডিং অর্ডার নেই!');
     }
 
     const trxData = transactions[trxId];
-
     if (!trxData) {
-      return message.reply('❌ Transaction ID: **' + trxId + '** খুঁজে পাওয়া যায়নি। টাকা পাঠিয়ে থাকলে ১-২ মিনিট অপেক্ষা করে আবার চেষ্টা করুন।');
+      return message.reply(`❌ Transaction ID: **${trxId}** খুঁজে পাওয়া যায়নি। টাকা বানিয়ে থাকলে ১ মিনিট পর চেষ্টা করুন।`);
     }
 
     if (trxData.isUsed) {
-      return message.reply('⚠️ এই Transaction ID টি আগেই ভেরিফাই করা হয়ে গেছে!');
+      return message.reply('⚠️ এই Transaction ID টি আগেই ব্যবহৃত হয়েছে!');
     }
 
     if (trxData.amount < currentOrder.amount) {
-      return message.reply('❌ **পেমেন্ট অসম্পূর্ণ!**\nপ্রয়োজনীয় টাকা: **Tk ' + currentOrder.amount + '**\nআপনি পাঠিয়েছেন: **Tk ' + trxData.amount + '**');
+      return message.reply(`❌ **পেমেন্ট অসম্পূর্ণ!**\nপ্রয়োজন: **Tk ${currentOrder.amount}**\nপাঠিয়েছেন: **Tk ${trxData.amount}**`);
     }
 
     trxData.isUsed = true;
     delete pendingOrders[message.channel.id];
 
-    const successMsg = "🎉 **পেমেন্ট ভেরিফাইড ও সফল হয়েছে!**\n\n" +
-      "🛍️ **Product Name:** " + currentOrder.product + "\n" +
-      "💰 **Paid Amount:** Tk " + trxData.amount + "\n" +
-      "🆔 **Transaction ID:** " + trxId + "\n" +
-      "📱 **Sender Provider:** " + trxData.sender + "\n\n" +
-      "📄 **Full Message:**\n```\n" + trxData.message + "\n```\n" +
-      "আপনার অর্ডার সফলভাবে সম্পন্ন হয়েছে!";
-
-    return message.reply(successMsg);
+    return message.reply(
+      `🎉 **পেমেন্ট ভেরিফাইড!**\n\n🛍️ **Product:** ${currentOrder.product}\n💰 **Amount:** Tk ${trxData.amount}\n🆔 **TrxID:** ${trxId}\n\n📄 **Full Message:**\n\`\`\`\n${trxData.message}\n\`\`\``
+    );
   }
 });
 
-// বট লগইন
 client.login(process.env.DISCORD_TOKEN);
 
-// সার্ভার পোর্ট লিসেন
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
