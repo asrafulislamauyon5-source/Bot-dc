@@ -2,8 +2,11 @@ const express = require('express');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 const app = express();
+
+// সকল প্রকার বডি ডাটা গ্রহণ করার জন্য মিডলওয়্যার
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.text({ type: '*/*' }));
 
 const client = new Client({
   intents: [
@@ -16,18 +19,30 @@ const client = new Client({
 const transactions = {};
 const pendingOrders = {};
 
+// SMS Webhook Endpoint
 app.post('/sms-webhook', (req, res) => {
-  // অ্যাপ থেকে যেভাবে ডেটাই আসুক না কেন তা রিসিভ করা
-  const body = req.body || {};
-  const sender = body.sender || body.from || body.phone || 'Unknown';
-  const message = body.message || body.text || body.sms || body.body || (typeof body === 'string' ? body : '');
+  console.log('--- Incoming Webhook Request ---');
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
 
-  console.log('Received Webhook Payload:', JSON.stringify(body));
+  let rawContent = '';
 
-  if (message) {
-    // bKash (TrxID), Nagad (TxnID/TxID), Rocket (TxnID/TrxID) সব মেলাবে
-    const trxMatch = message.match(/(?:TrxID|TxnID|TxID|TRXID|TXNID|Trx ID|Txn ID)[:\s]*([A-Z0-9]+)/i);
-    const amountMatch = message.match(/(?:Tk|BDT|Tk\.)\s*([\d,]+\.?\d*)|([\d,]+\.?\d*)\s*(?:Tk|BDT|Tk\.)/i);
+  // ডাটা যেভাবে আসুক না কেন টেক্সটে রূপান্তর
+  if (typeof req.body === 'string') {
+    rawContent = req.body;
+  } else if (typeof req.body === 'object' && req.body !== null) {
+    rawContent = JSON.stringify(req.body);
+  }
+
+  // urldecode করা
+  try {
+    rawContent = decodeURIComponent(rawContent);
+  } catch (e) {}
+
+  if (rawContent) {
+    // bKash, Nagad, Rocket-এর TrxID পার্সিং (যেমন: DI172PZTND, 75X1WDG0)
+    const trxMatch = rawContent.match(/(?:TrxID|TxnID|TxID|TRXID|TXNID|Trx ID|Txn ID)[:\s]*([A-Z0-9]{8,12})/i);
+    const amountMatch = rawContent.match(/(?:Tk|BDT|Tk\.)\s*([\d,]+\.?\d*)|([\d,]+\.?\d*)\s*(?:Tk|BDT|Tk\.)/i);
 
     if (trxMatch) {
       const trxId = trxMatch[1].toUpperCase();
@@ -37,20 +52,19 @@ app.post('/sms-webhook', (req, res) => {
       }
       const amount = rawAmount ? parseFloat(rawAmount.replace(',', '')) : 0;
 
-      // সিকিউরিটির জন্য Balance তথ্য মুছে দেওয়া
-      const cleanedMessage = message.replace(/(?:Balance|Bal)\s*(?:Tk|BDT|Tk\.)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***');
+      // গোপন তথ্য ও বেলেন্স মাস্ক করা
+      const cleanedMessage = rawContent.replace(/(?:Balance|Bal)\s*(?:Tk|BDT|Tk\.)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***');
 
       transactions[trxId] = {
-        sender: sender,
         amount: amount,
         message: cleanedMessage,
         isUsed: false,
         time: new Date()
       };
 
-      console.log(`✅ Saved TrxID: ${trxId} | Amount: ${amount}`);
+      console.log(` SUCCESS: Saved TrxID: ${trxId} | Amount: ${amount}`);
     } else {
-      console.log('❌ Could not parse TrxID from message:', message);
+      console.log(' FAILED: TrxID Regex pattern did not match content:', rawContent);
     }
   }
 
@@ -120,7 +134,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('⚠️ এই Transaction ID টি আগেই ব্যবহৃত হয়েছে!');
     }
 
-    if (trxData.amount < currentOrder.amount) {
+    if (trxData.amount > 0 && trxData.amount < currentOrder.amount) {
       return message.reply(`❌ **পেমেন্ট অসম্পূর্ণ!**\nপ্রয়োজন: **Tk ${currentOrder.amount}**\nপাঠিয়েছেন: **Tk ${trxData.amount}**`);
     }
 
