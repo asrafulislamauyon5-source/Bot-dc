@@ -22,9 +22,8 @@ app.post('/sms-webhook', (req, res) => {
   console.log('Received SMS from:', sender, 'Message:', message);
 
   if (message) {
-    // বিকাশ (TrxID) ও নগদ/রকেট (TxnID, TxID)-এর জন্য রেগুলার এক্সপ্রেশন
+    // বিকাশ (TrxID) ও নগদ/রকেট (TxnID, TxID)-এর জন্য শক্তিশালী ফিল্টার
     const trxMatch = message.match(/(?:TrxID|TxnID|TxID|TRXID|TXNID)[:\s]*([A-Z0-9]+)/i);
-    // টাকার পরিমাণ ক্যাপচার (Tk, BDT, Tk.)
     const amountMatch = message.match(/(?:Tk|BDT|Tk\.)\s*([\d,]+\.?\d*)/i);
     const numberMatch = message.match(/(?:from|to)\s+(01\d{9})/i);
 
@@ -33,7 +32,7 @@ app.post('/sms-webhook', (req, res) => {
       const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '')) : 0;
       const senderNum = numberMatch ? numberMatch[1] : '';
 
-      // Balance অংশ হাইড করা (বিকাশ ও নগদ উভয়ের জন্য)
+      // Balance অংশ হাইড করা
       const cleanedMessage = message.replace(/(?:Balance|Bal)\s*(?:Tk|BDT|Tk\.)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***');
 
       transactions[trxId] = {
@@ -123,7 +122,7 @@ client.on('messageCreate', async (message) => {
     const trxId = args[1] ? args[1].trim().toUpperCase() : null;
 
     if (!trxId) {
-      return message.reply('❌ অনুগ্রহ করে আপনার Transaction ID দিন।\nউদাহরণ: `!verify 75X0CKVH`');
+      return message.reply('❌ অনুগ্রহ করে আপনার Transaction ID দিন।\nউদাহরণ: `!verify DI142AHR94`');
     }
 
     const currentOrder = pendingOrders[message.channel.id];
