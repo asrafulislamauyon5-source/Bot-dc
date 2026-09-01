@@ -22,7 +22,8 @@ app.post('/sms-webhook', (req, res) => {
   console.log('Received SMS:', sender, message);
 
   if (message) {
-    const trxMatch = message.match(/TrxID\s+([A-Z0-9]+)/i);
+    // বিকাশ, নগদ ও রকেটের জন্য আপডেট করা TrxID / TxnID ফিল্টার
+    const trxMatch = message.match(/(?:TrxID|TxnID|TxnId|TRXID|TXNID)[:\s]+([A-Z0-9]+)/i);
     const amountMatch = message.match(/(?:Tk|BDT)\s*([\d,]+\.?\d*)/i);
     const numberMatch = message.match(/(?:from|to)\s+(01\d{9})/i);
 
@@ -31,10 +32,9 @@ app.post('/sms-webhook', (req, res) => {
       const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '')) : 0;
       const senderNum = numberMatch ? numberMatch[1] : '';
 
-      // Balance অংশ হাইড করা
+      // Balance অংশ হাইড করা (বিকাশ, নগদ ও রকেটের ক্ষেত্রে)
       const cleanedMessage = message
-        .replace(/Balance\s+(?:Tk|BDT)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***')
-        .replace(/Bal\s+(?:Tk|BDT)?\s*[\d,]+\.?\d*/gi, 'Bal Tk ***');
+        .replace(/(?:Balance|Bal)\s+(?:Tk|BDT)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***');
 
       transactions[trxId] = {
         sender: sender || 'Unknown',
@@ -80,10 +80,8 @@ client.on('messageCreate', async (message) => {
 
   // ৩. অর্ডার তৈরি করার কমান্ড (Allowed Roles Only): !order <Amount> <Product_Name>
   if (message.content.startsWith('!order')) {
-    // অনুমোদিত রোলের নামের কি-ওয়ার্ড
     const allowedKeywords = ['owner', 'management', 'team hypernest', 'official staff', 'admin'];
 
-    // ইউজারের রোলের সাথে ম্যাচিং চেকিং
     const hasPermission = message.member && message.member.roles.cache.some(role => {
       const roleName = role.name.toLowerCase();
       return allowedKeywords.some(keyword => roleName.includes(keyword));
