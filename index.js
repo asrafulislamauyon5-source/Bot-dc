@@ -56,7 +56,18 @@ app.post('/sms-webhook', (req, res) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // ১. পেমেন্ট নম্বর দেখার কমান্ড: !pay
+  // ১. হেল্প কমান্ড: !help
+  if (message.content.trim() === '!help') {
+    const helpText = "📜 **Bot Commands List:**\n\n" +
+      "💳 `!pay` - বিকাশ, নগদ ও রকেট নম্বর দেখার জন্য।\n" +
+      "🔍 `!verify <TrxID>` - পেমেন্ট ভেরিফাই করার জন্য (কাস্টমারদের জন্য)।\n" +
+      "📦 `!order <Amount> <Product_Name>` - নতুন অর্ডার তৈরি করার জন্য (শুধুমাত্র Owner/Admin)।\n" +
+      "ℹ️ `!help` - সকল কমান্ডের তালিকা দেখতে।";
+
+    return message.reply(helpText);
+  }
+
+  // ২. পেমেন্ট নম্বর দেখার কমান্ড: !pay
   if (message.content.trim() === '!pay') {
     const payText = "💳 **Our Payment Methods** (১-ক্লিকে কপি করুন):\n\n" +
       "💖 **bKash (Personal):**\n`01756625140`\n\n" +
@@ -67,8 +78,15 @@ client.on('messageCreate', async (message) => {
     return message.reply(payText);
   }
 
-  // ২. অর্ডার তৈরি করার কমান্ড: !order <Amount> <Product_Name>
+  // ৩. অর্ডার তৈরি করার কমান্ড (Owner Access Only): !order <Amount> <Product_Name>
   if (message.content.startsWith('!order')) {
+    // Verified Owner রোল চেকিং
+    const hasOwnerRole = message.member && message.member.roles.cache.some(role => role.name.toLowerCase() === 'verified owner');
+
+    if (!hasOwnerRole) {
+      return message.reply('❌ **অ্যাক্সেস ডিনাইড!** এই কমান্ডটি শুধুমাত্র **verified owner** রোলের ইউজাররা ব্যবহার করতে পারবেন।');
+    }
+
     const args = message.content.split(' ');
     const amount = parseFloat(args[1]);
     const productName = args.slice(2).join(' ');
@@ -86,7 +104,7 @@ client.on('messageCreate', async (message) => {
     const orderText = "📦 **অর্ডার তৈরি করা হয়েছে!**\n" +
       "🛍️ **Product:** " + productName + "\n" +
       "💰 **Payable Amount:** Tk " + amount + "\n\n" +
-      "💳 **Payment Numbers** (কপি করতে স্পার্স করুন):\n" +
+      "💳 **Payment Numbers** (কপি করতে স্পর্শ করুন):\n" +
       "💖 **bKash:** `01756625140`\n" +
       "🧡 **Nagad:** `01604757018`\n" +
       "💜 **Rocket:** `01756625140`\n\n" +
@@ -95,7 +113,7 @@ client.on('messageCreate', async (message) => {
     return message.reply(orderText);
   }
 
-  // ৩. পেমেন্ট ভেরিফাই করার কমান্ড: !verify <TrxID>
+  // ৪. পেমেন্ট ভেরিফাই করার কমান্ড: !verify <TrxID>
   if (message.content.startsWith('!verify')) {
     const args = message.content.split(' ');
     const trxId = args[1] ? args[1].trim().toUpperCase() : null;
