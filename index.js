@@ -12,50 +12,65 @@ const client = new Client({
   ]
 });
 
-// ট্রানজেকশন ডাটা সেভ রাখার জন্য
-const pendingTransactions = new Map();
+// SMS ডেটা জমা রাখার অবজেক্ট
+const transactions = {};
 
-// Webhook Endpoint (SMS Forwarder থেকে মেসেজ আসবে)
+// SMS Forwarder থেকে আসা ডেটা রিসিভ করার এন্ডপয়েন্ট
 app.post('/sms-webhook', (req, res) => {
   const { sender, message } = req.body;
-  console.log(`Received SMS from ${sender}: ${message}`);
+  console.log('Received SMS:', sender, message);
 
   if (message) {
-    // bKash/Nagad ট্রানজেকশন আইডি বের করার জন্য Regex Pattern
-    const trxMatch = message.match(/(?:TrxID|TxnID|ID)\s+([A-Z0-9]+)/i);
-    if (trxMatch && trxMatch[1]) {
-      const trxId = trxMatch[1].trim();
-      pendingTransactions.set(trxId, { sender, message, time: Date.now() });
-      console.log(`Stored TrxID: ${trxId}`);
+    // TrxID বের করার রেগুলার এক্সপ্রেশন
+    const trxMatch = message.match(/TrxID\s+([A-Z0-9]+)/i);
+    // টাকার পরিমাণ বের করার রেগুলার এক্সপ্রেশন
+    const amountMatch = message.match(/(?:Tk|BDT)\s*([\d,]+\.?\d*)/i);
+
+    if (trxMatch) {
+      const trxId = trxMatch[1].toUpperCase();
+      const amount = amountMatch ? amountMatch[1] : 'Unknown';
+
+      transactions[trxId] = {
+        sender: sender || 'Unknown',
+        amount: amount,
+        fullMessage: message,
+        time: new Date()
+      };
+
+      console.log(`Saved TrxID: ${trxId} | Amount: ${amount}`);
     }
   }
 
   res.status(200).send({ status: 'success' });
 });
 
-// Discord Bot Commands
+// ডিসকর্ড কমান্ড হ্যান্ডলার
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
   if (message.content.startsWith('!verify')) {
     const args = message.content.split(' ');
-    const userTrxId = args[1]?.trim();
+    const trxId = args[1] ? args[1].trim().toUpperCase() : null;
 
-    if (!userTrxId) {
-      return message.reply('অনুগ্রহ করে Transaction ID দিন। উদাহরণ: `!verify DI181WDGZQ`');
+    if (!trxId) {
+      return message.reply('❌ অনুগ্রহ করে একটি Transaction ID দিন। উদাহরণ: `!verify DI142AHR94`');
     }
 
-    if (pendingTransactions.has(userTrxId)) {
-      const txData = pendingTransactions.get(userTrxId);
-      message.reply(`✅ Transaction **${userTrxId}** সফলভাবে ভেরিফাই হয়েছে!\n**SMS Details:** ${txData.message}`);
-      pendingTransactions.delete(userTrxId);
+    if (transactions[trxId]) {
+      const data = transactions[trxId];
+      // ব্যালেন্স বা গোপন তথ্য ছাড়া শুধু প্রয়োজনীয় অংশ দেখানো
+      message.reply(`✅ Transaction **${trxId}** সফলভাবে ভেরিফাই হয়েছে!\n💰 **টাকার পরিমাণ:** Tk ${data.amount}`);
     } else {
-      message.reply(`❌ Transaction ID: **${userTrxId}** খুঁজে পাওয়া যায়নি। সঠিক ID দিন অথবা কিছু সময় পর চেষ্টা করুন।`);
+      message.reply(`❌ Transaction ID: **${trxId}** খুঁজে পাওয়া যায়নি। সঠিক ID দিন অথবা কিছু সময় পর চেষ্টা করুন।`);
     }
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
-
+// বট লগইন
 client.login(process.env.DISCORD_TOKEN);
+
+// সার্ভার পোর্ট লিসেন
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
