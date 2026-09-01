@@ -12,27 +12,34 @@ const client = new Client({
   ]
 });
 
-// ডাটা রাখার অবজেক্ট
+// ডাটা স্টোরেজ অবজেক্ট
 const transactions = {};
 const pendingOrders = {};
 
-// SMS Forwarder থেকে আসা ডেটা রিসিভ করা
+// SMS Forwarder থেকে Webhook ডেটা রিসিভ
 app.post('/sms-webhook', (req, res) => {
   const { sender, message } = req.body;
   console.log('Received SMS from:', sender, 'Message:', message);
 
   if (message) {
-    // বিকাশ (TrxID), নগদ ও রকেট (TxnID, TxID)-এর জন্য সার্বজনীন Regex Filter
+    // বিকাশ (TrxID), নগদ (TxnID/TxID) ও রকেট (TxnID)-এর জন্য রেগুলার এক্সপ্রেশন
     const trxMatch = message.match(/(?:TrxID|TxnID|TxID|TRXID|TXNID)[:\s]*([A-Z0-9]+)/i);
-    const amountMatch = message.match(/(?:Tk|BDT|Tk\.)\s*([\d,]+\.?\d*)/i);
+    // বিভিন্ন ধরনের টাকার ফরম্যাট ক্যাপচার (Tk 500, Tk. 500, 500 Tk, BDT 500)
+    const amountMatch = message.match(/(?:Tk|BDT|Tk\.)\s*([\d,]+\.?\d*)|([\d,]+\.?\d*)\s*(?:Tk|BDT|Tk\.)/i);
     const numberMatch = message.match(/(?:from|to)\s+(01\d{9})/i);
 
     if (trxMatch) {
       const trxId = trxMatch[1].toUpperCase();
-      const amount = amountMatch ? parseFloat(amountMatch[1].replace(',', '')) : 0;
+      
+      // টাকার পরিমাণ নিখুঁতভাবে বের করা
+      let rawAmount = 0;
+      if (amountMatch) {
+        rawAmount = amountMatch[1] || amountMatch[2];
+      }
+      const amount = rawAmount ? parseFloat(rawAmount.replace(',', '')) : 0;
       const senderNum = numberMatch ? numberMatch[1] : '';
 
-      // Balance অংশ হাইড করা (বিকাশ, নগদ ও রকেট সবগুলোর জন্য)
+      // সিকিউরিটির জন্য Balance অংশ হাইড করা (বিকাশ ও নগদ সবগুলোর জন্য)
       const cleanedMessage = message.replace(/(?:Balance|Bal)\s*(?:Tk|BDT|Tk\.)?\s*[\d,]+\.?\d*/gi, 'Balance Tk ***');
 
       transactions[trxId] = {
@@ -53,22 +60,22 @@ app.post('/sms-webhook', (req, res) => {
   res.status(200).send({ status: 'success' });
 });
 
-// ডিসকর্ড কমান্ড হ্যান্ডলার
+// ডিসকর্ড বট কমান্ড হ্যান্ডলার
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  // ১. হেল্প কমান্ড: !help
+  // ১. হেল্প কমান্ড
   if (message.content.trim() === '!help') {
     const helpText = "📜 **Bot Commands List:**\n\n" +
-      "💳 `!pay` - বিকাশ, নগদ ও রকেট নম্বর দেখার জন্য।\n" +
+      "💳 `!pay` - পেমেন্ট নম্বর দেখার জন্য।\n" +
       "🔍 `!verify <TrxID>` - পেমেন্ট ভেরিফাই করার জন্য (কাস্টমারদের জন্য)।\n" +
-      "📦 `!order <Amount> <Product_Name>` - নতুন অর্ডার তৈরি করার জন্য (Staff/Admin Only)।\n" +
+      "📦 `!order <Amount> <Product_Name>` - নতুন অর্ডার তৈরি করতে (Admin/Staff Only)।\n" +
       "ℹ️ `!help` - সকল কমান্ডের তালিকা দেখতে।";
 
     return message.reply(helpText);
   }
 
-  // ২. পেমেন্ট নম্বর দেখার কমান্ড: !pay
+  // ২. পেমেন্ট মেথড দেখার কমান্ড
   if (message.content.trim() === '!pay') {
     const payText = "💳 **Our Payment Methods** (১-ক্লিকে কপি করুন):\n\n" +
       "💖 **bKash (Personal):**\n`01756625140`\n\n" +
@@ -79,7 +86,7 @@ client.on('messageCreate', async (message) => {
     return message.reply(payText);
   }
 
-  // ৩. অর্ডার তৈরি করার কমান্ড (Allowed Roles Only): !order <Amount> <Product_Name>
+  // ৩. অর্ডার তৈরি করার কমান্ড: !order <Amount> <Product_Name>
   if (message.content.startsWith('!order')) {
     const allowedKeywords = ['owner', 'management', 'team hypernest', 'official staff', 'admin'];
 
@@ -124,7 +131,7 @@ client.on('messageCreate', async (message) => {
     const trxId = args[1] ? args[1].trim().toUpperCase() : null;
 
     if (!trxId) {
-      return message.reply('❌ অনুগ্রহ করে আপনার Transaction ID দিন।\nউদাহরণ: `!verify DI142AHR94`');
+      return message.reply('❌ অনুগ্রহ করে আপনার Transaction ID দিন।\nউদাহরণ: `!verify 75X1WDG0`');
     }
 
     const currentOrder = pendingOrders[message.channel.id];
@@ -150,7 +157,6 @@ client.on('messageCreate', async (message) => {
     trxData.isUsed = true;
     delete pendingOrders[message.channel.id];
 
-    // বিশদ বিবরণ সহ সফল রেসপন্স
     const successMsg = "🎉 **পেমেন্ট ভেরিফাইড ও সফল হয়েছে!**\n\n" +
       "🛍️ **Product Name:** " + currentOrder.product + "\n" +
       "💰 **Paid Amount:** Tk " + trxData.amount + "\n" +
